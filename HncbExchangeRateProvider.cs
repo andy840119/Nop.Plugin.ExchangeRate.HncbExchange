@@ -73,7 +73,7 @@ namespace Nop.Plugin.ExchangeRate.HncbExchange
                             ratesToTwd.Add(new Core.Domain.Directory.ExchangeRate()
                             {
                                 CurrencyCode = rate.DESC_ENG,//直接用英文說明當作Code
-                                Rate = Convert.ToDecimal(rate.SELL_AMT_BOARD),
+                                Rate = 1 / Convert.ToDecimal(rate.SELL_AMT_BOARD),
                                 UpdatedOn = DateTime.UtcNow,
                             });
                         }
@@ -86,7 +86,7 @@ namespace Nop.Plugin.ExchangeRate.HncbExchange
             }
 
             //return result for the twd
-            if (exchangeRateCurrencyCode.Equals("TWD", StringComparison.InvariantCultureIgnoreCase))
+            if (exchangeRateCurrencyCode.Equals("twd", StringComparison.InvariantCultureIgnoreCase))
                 return ratesToTwd;
 
             //use only currencies that are supported by Hncb
