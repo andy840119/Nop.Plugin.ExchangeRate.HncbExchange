@@ -6,11 +6,13 @@ using System.Net;
 using System.Xml;
 using Nop.Core;
 using Nop.Core.Plugins;
+using Nop.Plugin.ExchangeRate.HncbExchange.Extensions;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
+using Newtonsoft.Json;
 
-namespace Nop.Plugin.ExchangeRate.EcbExchange
+namespace Nop.Plugin.ExchangeRate.HncbExchange
 {
     public class HncbExchangeRateProvider : BasePlugin, IExchangeRateProvider
     {
@@ -36,6 +38,7 @@ namespace Nop.Plugin.ExchangeRate.EcbExchange
 
         /// <summary>
         /// Gets currency live rates
+        /// Rate Url is : http://event.hncb.com.tw/wps/portal/HNCB/exchange-rate/!ut/p/z1/jZBNC4JAEIZ_Swevzpga0W0Lv8L0FNpewsJWQ11ZN_fvtxAdoqzmNvC8zwwvUMiBdsVYs0LWvCsavR_o4oipG4WY4i5NLEQSu44Tzj07SBCyBzAxBIH-lZ8G6Hd9BvT1BG7Q0gZvbXm-bwURPoFpx_bXk7oF0p3sJQMqykspSmHehC6nkrIfVgYaqJQyGeesKc0zb02pjI-pig8S8jcY-naf49VtxpjM7lzGdIY!/?1dmy&urile=wcm%3apath%3a/wps/wcm/connect/hncb/site_map/hncb/various_forex/exchange_rate_current_inquiry
         /// </summary>
         /// <param name="exchangeRateCurrencyCode">Exchange rate currency code</param>
         /// <returns>Exchange rates</returns>
@@ -44,68 +47,55 @@ namespace Nop.Plugin.ExchangeRate.EcbExchange
             if (exchangeRateCurrencyCode == null)
                 throw new ArgumentNullException(nameof(exchangeRateCurrencyCode));
 
-            //add euro with rate 1
-            var ratesToEuro = new List<Core.Domain.Directory.ExchangeRate>
+            //add twd with rate 1
+            var ratesToTwd = new List<Core.Domain.Directory.ExchangeRate>
             {
                 new Core.Domain.Directory.ExchangeRate
                 {
-                    CurrencyCode = "EUR",
+                    CurrencyCode = "TWD",
                     Rate = 1,
                     UpdatedOn = DateTime.UtcNow
                 }
             };
 
-            //get exchange rates to euro from European Central Bank
-            var request = (HttpWebRequest)WebRequest.Create("http://www.ecb.int/stats/eurofxref/eurofxref-daily.xml");
             try
-            {
-                using (var response = request.GetResponse())
+            { 
+                using (WebClient wc = new WebClient())
                 {
-                    //load XML document
-                    var document = new XmlDocument();
-                    document.Load(response.GetResponseStream());
-
-                    //add namespaces
-                    var namespaces = new XmlNamespaceManager(document.NameTable);
-                    namespaces.AddNamespace("ns", "http://www.ecb.int/vocabulary/2002-08-01/eurofxref");
-                    namespaces.AddNamespace("gesmes", "http://www.gesmes.org/xml/2002-08-01");
-
-                    //get daily rates
-                    var dailyRates = document.SelectSingleNode("gesmes:Envelope/ns:Cube/ns:Cube", namespaces);
-                    if (!DateTime.TryParseExact(dailyRates.Attributes["time"].Value, "yyyy-MM-dd", null, DateTimeStyles.None, out DateTime updateDate))
-                        updateDate = DateTime.UtcNow;
-
-                    foreach (XmlNode currency in dailyRates.ChildNodes)
-                    {
-                        //get rate
-                        if (!decimal.TryParse(currency.Attributes["rate"].Value, out decimal currencyRate))
-                            continue;
-
-                        ratesToEuro.Add(new Core.Domain.Directory.ExchangeRate()
-                        {
-                            CurrencyCode = currency.Attributes["currency"].Value,
-                            Rate = currencyRate,
-                            UpdatedOn = updateDate
-                        });
+                    int timestramp = DateTime.UtcNow.ToTimeStamp();
+                    var jsonString = wc.DownloadString("http://event.hncb.com.tw/hncb/rest/exRate/all?_=" + timestramp);
+                    var rates = JsonConvert.DeserializeObject<List<HncbJsonObject>>(jsonString);
+            
+                    foreach(var rate in rates)
+                    { 
+                        if(string.IsNullOrEmpty(rate.TYPE)) 
+                        { 
+                            ratesToTwd.Add(new Core.Domain.Directory.ExchangeRate()
+                            {
+                                CurrencyCode = rate.DESC_ENG,//直接用英文說明當作Code
+                                Rate = Convert.ToDecimal(rate.SELL_AMT_BOARD),
+                                UpdatedOn = DateTime.UtcNow,
+                            });
+                        }
                     }
                 }
             }
-            catch (WebException ex)
-            {
+            catch(Exception ex)
+            { 
                 _logger.Error("ECB exchange rate provider", ex);
             }
 
-            //return result for the euro
-            if (exchangeRateCurrencyCode.Equals("eur", StringComparison.InvariantCultureIgnoreCase))
-                return ratesToEuro;
+            //return result for the twd
+            if (exchangeRateCurrencyCode.Equals("TWD", StringComparison.InvariantCultureIgnoreCase))
+                return ratesToTwd;
 
-            //use only currencies that are supported by ECB
-            var exchangeRateCurrency = ratesToEuro.FirstOrDefault(rate => rate.CurrencyCode.Equals(exchangeRateCurrencyCode, StringComparison.InvariantCultureIgnoreCase));
+            //use only currencies that are supported by Hncb
+            var exchangeRateCurrency = ratesToTwd.FirstOrDefault(rate => rate.CurrencyCode.Equals(exchangeRateCurrencyCode, StringComparison.InvariantCultureIgnoreCase));
             if (exchangeRateCurrency == null)
-                throw new NopException(_localizationService.GetResource("Plugins.ExchangeRate.EcbExchange.Error"));
+                throw new NopException(_localizationService.GetResource("Plugins.ExchangeRate.HncbExchange.Error"));
 
-            //return result for the selected (not euro) currency
-            return ratesToEuro.Select(rate => new Core.Domain.Directory.ExchangeRate
+            //return result for the selected (not twd) currency
+            return ratesToTwd.Select(rate => new Core.Domain.Directory.ExchangeRate
             {
                 CurrencyCode = rate.CurrencyCode,
                 Rate = Math.Round(rate.Rate / exchangeRateCurrency.Rate, 4),
@@ -119,7 +109,7 @@ namespace Nop.Plugin.ExchangeRate.EcbExchange
         public override void Install()
         {
             //locales
-            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.ExchangeRate.EcbExchange.Error", "You can use ECB (European central bank) exchange rate provider only when the primary exchange rate currency is supported by ECB");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.ExchangeRate.HncbExchange.Error", "You can use HNCB (TWD central bank) exchange rate provider only when the primary exchange rate currency is supported by Hncb");
 
             base.Install();
         }
@@ -130,7 +120,7 @@ namespace Nop.Plugin.ExchangeRate.EcbExchange
         public override void Uninstall()
         {
             //locales
-            _localizationService.DeletePluginLocaleResource("Plugins.ExchangeRate.EcbExchange.Error");
+            _localizationService.DeletePluginLocaleResource("Plugins.ExchangeRate.HnchExchange.Error");
 
             base.Uninstall();
         }
