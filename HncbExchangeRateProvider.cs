@@ -82,7 +82,7 @@ namespace Nop.Plugin.ExchangeRate.HncbExchange
             }
             catch(Exception ex)
             { 
-                _logger.Error("ECB exchange rate provider", ex);
+                _logger.Error("HNCB exchange rate provider", ex);
             }
 
             //return result for the twd
@@ -109,7 +109,7 @@ namespace Nop.Plugin.ExchangeRate.HncbExchange
         public override void Install()
         {
             //locales
-            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.ExchangeRate.HncbExchange.Error", "You can use HNCB (TWD central bank) exchange rate provider only when the primary exchange rate currency is supported by Hncb");
+            _localizationService.AddOrUpdatePluginLocaleResource("Plugins.ExchangeRate.HncbExchange.Error", "You can use HNCB (Hua Nan bank) exchange rate provider only when the primary exchange rate currency is supported by Hncb");
 
             base.Install();
         }
