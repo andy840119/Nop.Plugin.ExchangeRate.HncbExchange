@@ -68,11 +68,13 @@ namespace Nop.Plugin.ExchangeRate.HncbExchange
             
                     foreach(var rate in rates)
                     { 
+                        var currencyCode = rate.DESC_ENG;//直接用英文說明當作Code
+
                         if(string.IsNullOrEmpty(rate.TYPE)) 
                         { 
                             ratesToTwd.Add(new Core.Domain.Directory.ExchangeRate()
                             {
-                                CurrencyCode = rate.DESC_ENG,//直接用英文說明當作Code
+                                CurrencyCode = currencyCode,
                                 Rate = 1 / Convert.ToDecimal(rate.SELL_AMT_BOARD),
                                 UpdatedOn = DateTime.UtcNow,
                             });
